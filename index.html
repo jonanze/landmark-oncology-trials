@@ -94,10 +94,59 @@
     color: var(--muted); font-size: 12px; line-height: 1.6; max-width: 900px;
   }
   footer.disclaimer b { color: var(--ink); font-weight: 600; }
+  .navtoggle { display: none; }
+  .backdrop { display: none; }
   @media (max-width: 760px) {
     .app { grid-template-columns: 1fr; }
-    aside { display: none; }
-    .detail .inner { grid-template-columns: 1fr; }
+    main { padding: 14px 14px 54px; }
+
+    /* Off-canvas sidebar drawer */
+    aside {
+      display: block; position: fixed; top: 0; left: 0; bottom: 0;
+      width: 82%; max-width: 320px; z-index: 50;
+      transform: translateX(-100%); transition: transform .22s ease;
+      box-shadow: 0 0 34px rgba(15,22,35,.22);
+    }
+    body.nav-open aside { transform: translateX(0); }
+    .backdrop { position: fixed; inset: 0; background: rgba(15,22,35,.45); z-index: 40; }
+    body.nav-open .backdrop { display: block; }
+
+    .navtoggle {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 42px; height: 38px; margin-bottom: 10px;
+      border: 1px solid var(--line); border-radius: 9px;
+      background: var(--panel); color: var(--ink); font-size: 18px;
+      cursor: pointer; box-shadow: var(--shadow);
+    }
+    .search { flex: 1 1 100%; }
+
+    /* Table -> stacked cards */
+    table { background: transparent; box-shadow: none; border-radius: 0; }
+    thead { display: none; }
+    table, tbody, tr, td { display: block; width: 100%; }
+    tr.secrow td { background: transparent; color: var(--accent); padding: 14px 2px 6px; border: none; }
+    tr.trial {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 11px;
+      box-shadow: var(--shadow); margin-bottom: 10px; padding: 11px 13px;
+    }
+    tr.trial.open { border-radius: 11px 11px 0 0; margin-bottom: 0; border-bottom: none; }
+    tr.trial td {
+      border: none; padding: 3px 0; display: flex; gap: 14px;
+      justify-content: space-between; align-items: baseline;
+    }
+    tr.trial td.study { display: block; font-size: 15px; margin-bottom: 5px; }
+    tr.trial td.study .sub { font-weight: 400; }
+    tr.trial td:not(.study)::before {
+      content: attr(data-label); color: var(--muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: .04em; font-weight: 600; flex: 0 0 auto;
+    }
+    tr.detail td {
+      display: block; padding: 0; background: var(--panel);
+      border: 1px solid var(--line); border-top: none;
+      border-radius: 0 0 11px 11px; margin-bottom: 10px;
+    }
+    .detail .inner { grid-template-columns: 1fr; padding: 12px 14px 16px; }
+    footer.disclaimer { margin-top: 18px; }
   }
 </style>
 </head>
@@ -113,6 +162,7 @@
   </aside>
   <main>
     <div class="topbar">
+      <button id="navtoggle" class="navtoggle" aria-label="Open menu" title="Menu">&#9776;</button>
       <div class="crumbs" id="crumbs"></div>
       <div class="controls">
         <div class="search"><input id="q" type="search" placeholder="Search study, drug, population…" autocomplete="off"></div>
@@ -126,6 +176,7 @@
       <b>For clinicians and medical education.</b> Entries summarise published clinical trials and are a navigational aid, not a primary source &mdash; verify against the cited publication before any clinical use. This is not medical advice and is not a substitute for professional judgement or patient-specific care. Drug access, registration, and funding vary by country. No personal data is collected by this page.
     </footer>
   </main>
+  <div id="backdrop" class="backdrop"></div>
 </div>
 
 <script>
@@ -154,7 +205,14 @@ for (const [sys, sheets] of Object.entries(SYSTEMS)) {
   });
   sec.appendChild(box); nav.appendChild(sec);
 }
-document.getElementById('showall').onclick = () => { state.scope='all'; state.sheet=null; state.system=null; render(); };
+document.getElementById('showall').onclick = () => { state.scope='all'; state.sheet=null; state.system=null; closeNav(); render(); };
+
+// ---- Mobile drawer ----
+const backdrop = document.getElementById('backdrop');
+const navtoggle = document.getElementById('navtoggle');
+function closeNav() { document.body.classList.remove('nav-open'); }
+navtoggle.onclick = () => document.body.classList.toggle('nav-open');
+backdrop.onclick = closeNav;
 
 // ---- Filters ----
 const phases = [...new Set(TRIALS.map(t=>t.phase).filter(Boolean))].sort();
@@ -168,7 +226,7 @@ fyear.onchange = e => { state.yearBucket = e.target.value; render(); };
 document.getElementById('q').oninput = e => { state.q = e.target.value.toLowerCase().trim(); render(); };
 
 function selectSheet(sheet, sys) {
-  state.scope='sheet'; state.sheet=sheet; state.system=sys; render();
+  state.scope='sheet'; state.sheet=sheet; state.system=sys; closeNav(); render();
   document.querySelectorAll('.sheets a').forEach(a => a.classList.toggle('active', a.dataset.sheet===sheet));
 }
 function inBucket(y, b) {
@@ -244,12 +302,12 @@ function render() {
       lastGroup = groupKey;
     }
     const isOpen = state.open.has(t.id);
-    h += `<tr class="trial" data-id="${t.id}">
+    h += `<tr class="trial${isOpen?' open':''}" data-id="${t.id}">
       <td class="study">${esc(t.study)}${ state.scope==='all'&&t.subcat?`<div class="sub">${esc(t.subcat)}</div>`:''}</td>
-      <td><span class="ph ${phClass(t.phase)}">${esc(t.phase)}</span></td>
-      <td>${t.n!==''?esc(t.n):'&ndash;'}</td>
-      <td>${esc(t.year)}</td>
-      ${showSys?`<td>${esc(t.sheet)}</td>`:''}</tr>`;
+      <td data-label="Phase"><span class="ph ${phClass(t.phase)}">${esc(t.phase)}</span></td>
+      <td data-label="N">${t.n!==''?esc(t.n):'&ndash;'}</td>
+      <td data-label="Year">${esc(t.year)}</td>
+      ${showSys?`<td data-label="Setting">${esc(t.sheet)}</td>`:''}</tr>`;
     if (isOpen) {
       const span = showSys?5:4;
       const link = t.link ? `<a class="src" href="${esc(t.link)}" target="_blank" rel="noopener">${esc(t.ref)} &#8599;</a>` : esc(t.ref);
